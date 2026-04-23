@@ -37,6 +37,10 @@ from pca_metrics import add_composite_score
 from pca_plotting import (
     make_journal_figure,
     plot_enhanced_pca_scatter,
+    plot_grad_axis,
+    plot_grad_bins,
+    plot_grad_panels,
+    plot_grad_proj,
     plot_gradient_direction,
     plot_group_scatter,
     plot_si_scatter,
@@ -391,20 +395,34 @@ def generate_winner_outputs(
         assets["group_scatter"] = str(gp)
         assets["si_scatter"]    = str(sp)
 
-        # gradient direction (DM1-only concepts only)
+        # gradient figures (DM1-only concepts only)
         if winner.get("concept", "") == "WEIGHTS__BOX12_DM1_ONLY":
             grad_metrics = {
-                "rho_pc1":   float(winner.get("rho_pc1",   np.nan)),
-                "rho_pc2":   float(winner.get("rho_pc2",   np.nan)),
+                "rho_pc1":    float(winner.get("rho_pc1",    np.nan)),
+                "rho_pc2":    float(winner.get("rho_pc2",    np.nan)),
                 "grad_score": float(winner.get("grad_score", np.nan)),
             }
-            gd_p = plot_gradient_direction(
-                w_scat,
-                f"Winner {q_key} gradient direction",
-                sc12, meta_sc_tr, si_col, dx_col, evr,
-                grad_metrics, dpi=JOURNAL_DPI, fname_stem=stem,
-            )
-            assets["grad_dir"] = str(gd_p)
+            wtitle = f"Winner {q_key} gradient"
+            gd_p  = plot_gradient_direction(
+                w_scat, wtitle, sc12, meta_sc_tr, si_col, dx_col, evr,
+                grad_metrics, dpi=JOURNAL_DPI, fname_stem=stem)
+            ax_p  = plot_grad_axis(
+                w_scat, wtitle, sc12, meta_sc_tr, si_col, dx_col, evr,
+                grad_metrics, dpi=JOURNAL_DPI, fname_stem=stem)
+            pr_p  = plot_grad_proj(
+                w_scat, wtitle, sc12, meta_sc_tr, si_col, dx_col, evr,
+                grad_metrics, dpi=JOURNAL_DPI, fname_stem=stem)
+            bn_p  = plot_grad_bins(
+                w_scat, wtitle, sc12, meta_sc_tr, si_col, dx_col, evr,
+                grad_metrics, dpi=JOURNAL_DPI, fname_stem=stem)
+            pn_p  = plot_grad_panels(
+                w_scat, wtitle, sc12, meta_sc_tr, si_col, dx_col, evr,
+                grad_metrics, dpi=JOURNAL_DPI, fname_stem=stem)
+            assets["grad_dir"]    = str(gd_p)
+            assets["grad_axis"]   = str(ax_p)
+            assets["grad_proj"]   = str(pr_p)
+            assets["grad_bins"]   = str(bn_p)
+            assets["grad_panels"] = str(pn_p)
 
         # 11 — two-panel journal figure
         jp = make_journal_figure(
@@ -625,6 +643,10 @@ _BUNDLE_PATH_COLS = [
     "loadings_plot_path",
     "overlay_plot_path",
     "top_wavenumbers_csv_path",
+    "grad_axis_path",
+    "grad_proj_path",
+    "grad_bins_path",
+    "grad_panels_path",
     # legacy names as fallback
     "group_scatter_path",
     "si_scatter_path",

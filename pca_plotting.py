@@ -267,6 +267,381 @@ def plot_gradient_direction(
     return fpath
 
 
+def _grad_axis_vec_and_labels(
+    rho1: float, rho2: float,
+) -> Tuple[np.ndarray, str, str, str]:
+    """
+    Return (unit_vec, dominant_name, higher_si_label, lower_si_label).
+    unit_vec points toward HIGHER SI (matches sign of winning rho).
+    """
+    pc1_abs = abs(rho1) if np.isfinite(rho1) else 0.0
+    pc2_abs = abs(rho2) if np.isfinite(rho2) else 0.0
+    if pc1_abs >= pc2_abs:
+        sign = 1.0 if (np.isfinite(rho1) and rho1 >= 0) else -1.0
+        vec  = np.array([sign, 0.0])
+        dom  = "PC1"
+    else:
+        sign = 1.0 if (np.isfinite(rho2) and rho2 >= 0) else -1.0
+        vec  = np.array([0.0, sign])
+        dom  = "PC2"
+    return vec, dom, "Higher SI →", "← Lower SI"
+
+
+def plot_grad_axis(
+    out_dir: Path,
+    title: str,
+    scores_box12: np.ndarray,
+    meta_box12: pd.DataFrame,
+    si_col: str,
+    dx_col: str,
+    evr: Tuple[float, float],
+    grad_metrics: Dict[str, float],
+    dpi: int = FIGURE_DPI,
+    fname_stem: Optional[str] = None,
+) -> Path:
+    """
+    SI-colored Cohort 1 DM1 scatter (plasma), controls black.
+    Dashed axis line through DM1 centroid along the dominant gradient PC;
+    arrowhead and labels show SI direction.
+    """
+    pc1_var, pc2_var = evr
+    dm1_12, ctrl_12  = get_dm1_control_masks(meta_box12, dx_col, require_controls=True)
+    si_12  = pd.to_numeric(meta_box12[si_col], errors="coerce").to_numpy(float)
+    s_dm1  = scores_box12[dm1_12]
+    si_dm1 = si_12[dm1_12]
+    ok     = np.isfinite(si_dm1)
+
+    rho1       = grad_metrics.get("rho_pc1",    np.nan)
+    rho2       = grad_metrics.get("rho_pc2",    np.nan)
+    grad_score = grad_metrics.get("grad_score", np.nan)
+
+    fig, ax = plt.subplots(figsize=(7, 6))
+    ax.scatter(scores_box12[ctrl_12, 0], scores_box12[ctrl_12, 1],
+               c="black", marker="o", s=SIZE_BOX12, alpha=0.45,
+               label="Controls", edgecolors="none", zorder=2)
+    vmin = float(si_dm1[ok].min()) if ok.any() else 0.0
+    vmax = float(si_dm1[ok].max()) if ok.any() else 1.0
+    sc = ax.scatter(s_dm1[:, 0], s_dm1[:, 1],
+                    c=si_dm1, cmap="plasma", vmin=vmin, vmax=vmax,
+                    marker="o", s=SIZE_BOX12, alpha=0.9,
+                    label="Cohort 1 DM1", edgecolors="none", zorder=3)
+    plt.colorbar(sc, ax=ax, label="SI (DM1 severity)")
+
+    if np.isfinite(rho1) or np.isfinite(rho2):
+        vec, dom, hi_lbl, lo_lbl = _grad_axis_vec_and_labels(rho1, rho2)
+        spread = max(np.ptp(s_dm1[:, 0]), np.ptp(s_dm1[:, 1]), 1e-6) * 0.45
+        cx, cy = float(s_dm1[:, 0].mean()), float(s_dm1[:, 1].mean())
+        hi_end = (cx + vec[0] * spread, cy + vec[1] * spread)
+        lo_end = (cx - vec[0] * spread, cy - vec[1] * spread)
+        # dashed line
+        ax.plot([lo_end[0], hi_end[0]], [lo_end[1], hi_end[1]],
+                color="crimson", lw=1.5, linestyle="--", zorder=5)
+        # arrowhead at higher-SI end
+        ax.annotate("", xy=hi_end,
+                    xytext=(cx, cy),
+                    arrowprops=dict(arrowstyle="-|>", color="crimson", lw=2.0),
+                    zorder=6)
+        # direction labels
+        offset = spread * 0.12
+        ax.text(hi_end[0] + vec[0]*offset, hi_end[1] + vec[1]*offset,
+                "Higher SI", fontsize=7, color="crimson",
+                ha="center", va="center", zorder=7)
+        ax.text(lo_end[0] - vec[0]*offset, lo_end[1] - vec[1]*offset,
+                "Lower SI", fontsize=7, color="crimson",
+                ha="center", va="center", zorder=7)
+
+    dom_str = "PC1" if (abs(rho1 if np.isfinite(rho1) else 0) >=
+                        abs(rho2 if np.isfinite(rho2) else 0)) else "PC2"
+    txt = (f"Dominant: {dom_str}\n"
+           f"rho_PC1 = {_fmt(rho1, '.3f')}\n"
+           f"rho_PC2 = {_fmt(rho2, '.3f')}\n"
+           f"grad_score = {_fmt(grad_score, '.3f')}")
+    ax.text(0.02, 0.98, txt, transform=ax.transAxes, fontsize=8,
+            verticalalignment="top", family="monospace",
+            bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.88))
+    ax.set_title(title, fontsize=9)
+    ax.set_xlabel(f"PC1 ({pc1_var*100:.1f}%)")
+    ax.set_ylabel(f"PC2 ({pc2_var*100:.1f}%)")
+    ax.legend(loc="lower right", frameon=True, fontsize=8)
+    fig.tight_layout()
+    _stem = sanitize_filename(fname_stem) if fname_stem else sanitize_filename(title)
+    fpath = out_dir / (_stem + "_grad_axis.png")
+    fig.savefig(fpath, dpi=dpi)
+    plt.close(fig)
+    return fpath
+
+
+def plot_grad_proj(
+    out_dir: Path,
+    title: str,
+    scores_box12: np.ndarray,
+    meta_box12: pd.DataFrame,
+    si_col: str,
+    dx_col: str,
+    evr: Tuple[float, float],
+    grad_metrics: Dict[str, float],
+    dpi: int = FIGURE_DPI,
+    fname_stem: Optional[str] = None,
+) -> Path:
+    """
+    Dominant axis line + projected DM1 scores as SI-colored tick marks.
+    Makes the SI ordering along the dominant axis explicit.
+    """
+    pc1_var, pc2_var = evr
+    dm1_12, ctrl_12  = get_dm1_control_masks(meta_box12, dx_col, require_controls=True)
+    si_12  = pd.to_numeric(meta_box12[si_col], errors="coerce").to_numpy(float)
+    s_dm1  = scores_box12[dm1_12]
+    si_dm1 = si_12[dm1_12]
+    ok     = np.isfinite(si_dm1)
+
+    rho1       = grad_metrics.get("rho_pc1",    np.nan)
+    rho2       = grad_metrics.get("rho_pc2",    np.nan)
+    grad_score = grad_metrics.get("grad_score", np.nan)
+
+    fig, ax = plt.subplots(figsize=(7, 6))
+    ax.scatter(scores_box12[ctrl_12, 0], scores_box12[ctrl_12, 1],
+               c="black", marker="o", s=SIZE_BOX12, alpha=0.35,
+               label="Controls", edgecolors="none", zorder=2)
+    vmin = float(si_dm1[ok].min()) if ok.any() else 0.0
+    vmax = float(si_dm1[ok].max()) if ok.any() else 1.0
+    sc = ax.scatter(s_dm1[:, 0], s_dm1[:, 1],
+                    c=si_dm1, cmap="plasma", vmin=vmin, vmax=vmax,
+                    marker="o", s=SIZE_BOX12, alpha=0.55,
+                    label="Cohort 1 DM1", edgecolors="none", zorder=3)
+    plt.colorbar(sc, ax=ax, label="SI (DM1 severity)")
+
+    if np.isfinite(rho1) or np.isfinite(rho2):
+        vec, dom, _, _ = _grad_axis_vec_and_labels(rho1, rho2)
+        pc1_abs = abs(rho1) if np.isfinite(rho1) else 0.0
+        pc2_abs = abs(rho2) if np.isfinite(rho2) else 0.0
+        spread = max(np.ptp(s_dm1[:, 0]), np.ptp(s_dm1[:, 1]), 1e-6) * 0.45
+        cx, cy = float(s_dm1[:, 0].mean()), float(s_dm1[:, 1].mean())
+        hi_end = (cx + vec[0] * spread, cy + vec[1] * spread)
+        lo_end = (cx - vec[0] * spread, cy - vec[1] * spread)
+        ax.plot([lo_end[0], hi_end[0]], [lo_end[1], hi_end[1]],
+                color="crimson", lw=1.5, linestyle="--", zorder=4, alpha=0.7)
+        ax.annotate("", xy=hi_end, xytext=(cx, cy),
+                    arrowprops=dict(arrowstyle="-|>", color="crimson", lw=2.0),
+                    zorder=6)
+
+        # Projected tick marks along dominant axis
+        tick_perp  = spread * 0.05   # half-height of tick
+        cmap_obj   = plt.cm.plasma
+        norm_si    = plt.Normalize(vmin=vmin, vmax=vmax)
+        if pc1_abs >= pc2_abs:
+            # PC1 dominant: ticks are vertical segments at x = s_dm1[:,0], y ≈ cy
+            for i in range(len(s_dm1)):
+                xp = float(s_dm1[i, 0])
+                col = cmap_obj(norm_si(si_dm1[i])) if np.isfinite(si_dm1[i]) else "grey"
+                ax.plot([xp, xp], [cy - tick_perp, cy + tick_perp],
+                        color=col, lw=1.2, zorder=5, alpha=0.85)
+            # label rho near the axis
+            ax.text(hi_end[0], cy - spread * 0.08,
+                    f"rho_PC1 = {_fmt(rho1, '.3f')}",
+                    fontsize=7, color="crimson", ha="center", va="top", zorder=7)
+        else:
+            # PC2 dominant: ticks are horizontal segments at y = s_dm1[:,1], x ≈ cx
+            for i in range(len(s_dm1)):
+                yp = float(s_dm1[i, 1])
+                col = cmap_obj(norm_si(si_dm1[i])) if np.isfinite(si_dm1[i]) else "grey"
+                ax.plot([cx - tick_perp, cx + tick_perp], [yp, yp],
+                        color=col, lw=1.2, zorder=5, alpha=0.85)
+            ax.text(cx + spread * 0.08, hi_end[1],
+                    f"rho_PC2 = {_fmt(rho2, '.3f')}",
+                    fontsize=7, color="crimson", ha="left", va="center", zorder=7)
+
+    dom_str = "PC1" if (abs(rho1 if np.isfinite(rho1) else 0) >=
+                        abs(rho2 if np.isfinite(rho2) else 0)) else "PC2"
+    txt = (f"Dominant: {dom_str}\n"
+           f"rho_PC1 = {_fmt(rho1, '.3f')}\n"
+           f"rho_PC2 = {_fmt(rho2, '.3f')}\n"
+           f"grad_score = {_fmt(grad_score, '.3f')}")
+    ax.text(0.02, 0.98, txt, transform=ax.transAxes, fontsize=8,
+            verticalalignment="top", family="monospace",
+            bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.88))
+    ax.set_title(title, fontsize=9)
+    ax.set_xlabel(f"PC1 ({pc1_var*100:.1f}%)")
+    ax.set_ylabel(f"PC2 ({pc2_var*100:.1f}%)")
+    ax.legend(loc="lower right", frameon=True, fontsize=8)
+    fig.tight_layout()
+    _stem = sanitize_filename(fname_stem) if fname_stem else sanitize_filename(title)
+    fpath = out_dir / (_stem + "_grad_proj.png")
+    fig.savefig(fpath, dpi=dpi)
+    plt.close(fig)
+    return fpath
+
+
+def plot_grad_bins(
+    out_dir: Path,
+    title: str,
+    scores_box12: np.ndarray,
+    meta_box12: pd.DataFrame,
+    si_col: str,
+    dx_col: str,
+    evr: Tuple[float, float],
+    grad_metrics: Dict[str, float],
+    dpi: int = FIGURE_DPI,
+    fname_stem: Optional[str] = None,
+) -> Path:
+    """
+    DM1 points split into SI tercile bins (Low / Mid / High).
+    Centroids connected by arrows; controls shown in black.
+    """
+    pc1_var, pc2_var = evr
+    dm1_12, ctrl_12  = get_dm1_control_masks(meta_box12, dx_col, require_controls=True)
+    si_12  = pd.to_numeric(meta_box12[si_col], errors="coerce").to_numpy(float)
+    s_dm1  = scores_box12[dm1_12]
+    si_dm1 = si_12[dm1_12]
+    ok     = np.isfinite(si_dm1)
+
+    fig, ax = plt.subplots(figsize=(7, 6))
+    ax.scatter(scores_box12[ctrl_12, 0], scores_box12[ctrl_12, 1],
+               c="black", marker="o", s=SIZE_BOX12, alpha=0.35,
+               label="Controls", edgecolors="none", zorder=2)
+
+    # Background: faint plasma scatter of all DM1
+    vmin = float(si_dm1[ok].min()) if ok.any() else 0.0
+    vmax = float(si_dm1[ok].max()) if ok.any() else 1.0
+    ax.scatter(s_dm1[:, 0], s_dm1[:, 1],
+               c=si_dm1, cmap="plasma", vmin=vmin, vmax=vmax,
+               marker="o", s=SIZE_BOX12, alpha=0.30,
+               edgecolors="none", zorder=3)
+
+    bin_colors = ["#6a0dad", "#f77f00", "#ffd700"]   # purple, orange, gold
+    bin_labels = ["Low SI", "Mid SI", "High SI"]
+    centroids  = []
+
+    if ok.sum() >= 3:
+        terciles = np.percentile(si_dm1[ok], [33.3, 66.7])
+        bins = [
+            si_dm1 <= terciles[0],
+            (si_dm1 > terciles[0]) & (si_dm1 <= terciles[1]),
+            si_dm1 > terciles[1],
+        ]
+        for mask, col, lbl in zip(bins, bin_colors, bin_labels):
+            pts = s_dm1[mask & ok]
+            if len(pts) == 0:
+                centroids.append(None)
+                continue
+            cx_b, cy_b = float(pts[:, 0].mean()), float(pts[:, 1].mean())
+            centroids.append((cx_b, cy_b))
+            ax.scatter(pts[:, 0], pts[:, 1],
+                       c=col, marker="o", s=SIZE_BOX12 * 1.2, alpha=0.75,
+                       edgecolors="white", linewidths=0.4, zorder=4, label=lbl)
+            ax.scatter([cx_b], [cy_b], c=col, marker="D",
+                       s=SIZE_BOX12 * 3, edgecolors="black", linewidths=1.0,
+                       zorder=6)
+            ax.text(cx_b, cy_b, f"  {lbl}", fontsize=8, color=col,
+                    fontweight="bold", zorder=7, va="center")
+
+        # Connect centroids with arrows
+        valid = [(i, c) for i, c in enumerate(centroids) if c is not None]
+        for (i0, c0), (i1, c1) in zip(valid, valid[1:]):
+            ax.annotate("", xy=c1, xytext=c0,
+                        arrowprops=dict(arrowstyle="-|>", color="dimgrey",
+                                        lw=1.5, connectionstyle="arc3,rad=0.1"),
+                        zorder=5)
+
+    grad_score = grad_metrics.get("grad_score", np.nan)
+    rho1       = grad_metrics.get("rho_pc1",    np.nan)
+    rho2       = grad_metrics.get("rho_pc2",    np.nan)
+    txt = (f"rho_PC1 = {_fmt(rho1, '.3f')}\n"
+           f"rho_PC2 = {_fmt(rho2, '.3f')}\n"
+           f"grad_score = {_fmt(grad_score, '.3f')}")
+    ax.text(0.02, 0.98, txt, transform=ax.transAxes, fontsize=8,
+            verticalalignment="top", family="monospace",
+            bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.88))
+    ax.set_title(title, fontsize=9)
+    ax.set_xlabel(f"PC1 ({pc1_var*100:.1f}%)")
+    ax.set_ylabel(f"PC2 ({pc2_var*100:.1f}%)")
+    ax.legend(loc="lower right", frameon=True, fontsize=8)
+    fig.tight_layout()
+    _stem = sanitize_filename(fname_stem) if fname_stem else sanitize_filename(title)
+    fpath = out_dir / (_stem + "_grad_bins.png")
+    fig.savefig(fpath, dpi=dpi)
+    plt.close(fig)
+    return fpath
+
+
+def plot_grad_panels(
+    out_dir: Path,
+    title: str,
+    scores_box12: np.ndarray,
+    meta_box12: pd.DataFrame,
+    si_col: str,
+    dx_col: str,
+    evr: Tuple[float, float],
+    grad_metrics: Dict[str, float],
+    dpi: int = FIGURE_DPI,
+    fname_stem: Optional[str] = None,
+) -> Path:
+    """
+    Three-panel gradient figure:
+      Panel A — PCA scatter (controls black, DM1 plasma/SI)
+      Panel B — PC1 scores vs SI with trend line + rho annotation
+      Panel C — PC2 scores vs SI with trend line + rho annotation
+    """
+    pc1_var, pc2_var = evr
+    dm1_12, ctrl_12  = get_dm1_control_masks(meta_box12, dx_col, require_controls=True)
+    si_12  = pd.to_numeric(meta_box12[si_col], errors="coerce").to_numpy(float)
+    s_dm1  = scores_box12[dm1_12]
+    si_dm1 = si_12[dm1_12]
+    ok     = np.isfinite(si_dm1)
+
+    rho1       = grad_metrics.get("rho_pc1",    np.nan)
+    rho2       = grad_metrics.get("rho_pc2",    np.nan)
+    grad_score = grad_metrics.get("grad_score", np.nan)
+    vmin = float(si_dm1[ok].min()) if ok.any() else 0.0
+    vmax = float(si_dm1[ok].max()) if ok.any() else 1.0
+
+    fig, axes = plt.subplots(1, 3, figsize=(14, 5))
+    fig.suptitle(title, fontsize=9)
+
+    # Panel A — PCA scatter
+    ax = axes[0]
+    ax.scatter(scores_box12[ctrl_12, 0], scores_box12[ctrl_12, 1],
+               c="black", marker="o", s=SIZE_BOX12, alpha=0.40,
+               label="Controls", edgecolors="none", zorder=2)
+    sc = ax.scatter(s_dm1[:, 0], s_dm1[:, 1],
+                    c=si_dm1, cmap="plasma", vmin=vmin, vmax=vmax,
+                    marker="o", s=SIZE_BOX12, alpha=0.9,
+                    label="Cohort 1 DM1", edgecolors="none", zorder=3)
+    fig.colorbar(sc, ax=ax, label="SI", fraction=0.046, pad=0.04)
+    ax.set_xlabel(f"PC1 ({pc1_var*100:.1f}%)")
+    ax.set_ylabel(f"PC2 ({pc2_var*100:.1f}%)")
+    ax.set_title("PCA scatter", fontsize=8)
+    ax.legend(fontsize=7, loc="best", frameon=True)
+
+    # Panels B and C — PC axis vs SI
+    for ax, pc_idx, pc_lbl, rho_val in [
+        (axes[1], 0, f"PC1 ({pc1_var*100:.1f}%)", rho1),
+        (axes[2], 1, f"PC2 ({pc2_var*100:.1f}%)", rho2),
+    ]:
+        x_vals = s_dm1[ok, pc_idx]
+        y_vals = si_dm1[ok]
+        ax.scatter(x_vals, y_vals, c=y_vals, cmap="plasma",
+                   vmin=vmin, vmax=vmax, s=SIZE_BOX12, alpha=0.85,
+                   edgecolors="none", zorder=3)
+        if len(x_vals) >= 2:
+            coef = np.polyfit(x_vals, y_vals, 1)
+            x_line = np.linspace(x_vals.min(), x_vals.max(), 100)
+            ax.plot(x_line, np.polyval(coef, x_line),
+                    color="crimson", lw=1.5, zorder=4)
+        ax.set_xlabel(pc_lbl)
+        ax.set_ylabel("SI (DM1 severity)")
+        ax.set_title(f"{pc_lbl} vs SI", fontsize=8)
+        ax.text(0.05, 0.95, f"rho = {_fmt(rho_val, '.3f')}",
+                transform=ax.transAxes, fontsize=8, va="top",
+                bbox=dict(boxstyle="round,pad=0.25", facecolor="white", alpha=0.85))
+
+    fig.tight_layout()
+    _stem = sanitize_filename(fname_stem) if fname_stem else sanitize_filename(title)
+    fpath = out_dir / (_stem + "_grad_panels.png")
+    fig.savefig(fpath, dpi=dpi)
+    plt.close(fig)
+    return fpath
+
+
 def plot_enhanced_pca_scatter(
     out_dir: Path,
     title: str,

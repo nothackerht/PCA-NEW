@@ -37,6 +37,10 @@ from pca_metrics import (
 )
 from pca_plotting import (
     plot_enhanced_pca_scatter,
+    plot_grad_axis,
+    plot_grad_bins,
+    plot_grad_panels,
+    plot_grad_proj,
     plot_gradient_direction,
     plot_group_scatter,
     plot_si_scatter,
@@ -200,10 +204,12 @@ def _save_artifacts(
     run_name: str,
     mode_name: str,
     q_id: str,
-) -> Tuple[Path, Path, Path, Path, Path, Path, Path]:
+) -> Tuple[Path, Path, Path, Path, Path, Path, Path, Path, Path, Path, Path]:
     """
-    Save ALL 7 artifact files for one (question, run, mode) into out_dir.
-    Returns (group_path, si_path, enh_path, load_path, overlay_path, csv_path, grad_dir_path).
+    Save ALL 11 artifact files for one (question, run, mode) into out_dir.
+    Returns:
+      group, si, enh, load, overlay, csv,
+      grad_dir, grad_axis, grad_proj, grad_bins, grad_panels
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     gp = plot_group_scatter(
@@ -220,7 +226,19 @@ def _save_artifacts(
         top_k=TOP_K_WAVENUMBERS, gap_thresh=GAP_THRESH, fname_stem=pmode)
     grad_keys = ("rho_pc1", "rho_pc2", "grad_score")
     grad_m = {k: m[k] for k in grad_keys if k in m}
-    gdp = plot_gradient_direction(
+    gdp  = plot_gradient_direction(
+        out_dir, base_title, sc12, meta_tr, si_col, dx_col, evr,
+        grad_m, fname_stem=pmode)
+    axp  = plot_grad_axis(
+        out_dir, base_title, sc12, meta_tr, si_col, dx_col, evr,
+        grad_m, fname_stem=pmode)
+    prp  = plot_grad_proj(
+        out_dir, base_title, sc12, meta_tr, si_col, dx_col, evr,
+        grad_m, fname_stem=pmode)
+    bnp  = plot_grad_bins(
+        out_dir, base_title, sc12, meta_tr, si_col, dx_col, evr,
+        grad_m, fname_stem=pmode)
+    pnp  = plot_grad_panels(
         out_dir, base_title, sc12, meta_tr, si_col, dx_col, evr,
         grad_m, fname_stem=pmode)
     _save_metrics_json(
@@ -234,7 +252,7 @@ def _save_artifacts(
         ),
         fname_stem=pmode,
     )
-    return gp, sp, ep, lp, op, cp, gdp
+    return gp, sp, ep, lp, op, cp, gdp, axp, prp, bnp, pnp
 
 
 # =============================================================================
@@ -292,7 +310,7 @@ def run_question1_raw_geometry(
             sep_hol = {k[4:]: v for k, v in m.items() if k.startswith("hol_")}
             sep_cln = {k[4:]: v for k, v in m.items() if k.startswith("cln_")}
 
-            gp, sp, ep, lp, op, cp, gdp = _save_artifacts(
+            gp, sp, ep, lp, op, cp, gdp, axp, prp, bnp, pnp = _save_artifacts(
                 out_dir, base_title, pmode,
                 sc12, sc3, meta_tr, meta_te, si_col, dx_col, evr,
                 align, sep_hol, sep_cln, m,
@@ -326,6 +344,10 @@ def run_question1_raw_geometry(
                 overlay_plot_path=str(op),
                 top_wavenumbers_csv_path=str(cp),
                 grad_dir_path=str(gdp),
+                grad_axis_path=str(axp),
+                grad_proj_path=str(prp),
+                grad_bins_path=str(bnp),
+                grad_panels_path=str(pnp),
             ))
             print(f"[Q1] {mode_name} | {pmode} done")
 
@@ -416,7 +438,7 @@ def _run_one_sweep_config(
         # --- Save ALL artifacts per question ---
         if concept == "WEIGHTS__BOX12_DM1_ONLY":
             q2_out = qdirs["q2"] / sw / sc / pmode / run_name
-            gp, sp, ep, lp, op, cp, gdp = _save_artifacts(
+            gp, sp, ep, lp, op, cp, gdp, axp, prp, bnp, pnp = _save_artifacts(
                 q2_out, base_title, pmode,
                 sc12, sc3, meta_tr, meta_te, si_col, dx_col, evr,
                 align, sep_hol, sep_cln, m, wn_use, pca, X_tr, X_te,
@@ -438,7 +460,7 @@ def _run_one_sweep_config(
 
         elif concept == "WEIGHTS__BOX12_ALL":
             q3a_out = qdirs["q3a"] / sw / sc / pmode / run_name
-            gp, sp, ep, lp, op, cp, gdp = _save_artifacts(
+            gp, sp, ep, lp, op, cp, gdp, axp, prp, bnp, pnp = _save_artifacts(
                 q3a_out, base_title, pmode,
                 sc12, sc3, meta_tr, meta_te, si_col, dx_col, evr,
                 align, sep_hol, sep_cln, m, wn_use, pca, X_tr, X_te,
@@ -487,6 +509,10 @@ def _run_one_sweep_config(
             overlay_plot_path    = str(op),
             top_wavenumbers_csv_path = str(cp),
             grad_dir_path        = str(gdp),
+            grad_axis_path       = str(axp),
+            grad_proj_path       = str(prp),
+            grad_bins_path       = str(bnp),
+            grad_panels_path     = str(pnp),
         )
         rows.append(row)
 
