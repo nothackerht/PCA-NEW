@@ -1,0 +1,31 @@
+PCA Suite — Question Definitions
+======================================================================
+
+Q1: Native raw spectral geometry — no preprocessing, baseline reference.
+
+Q2: Cohort 2 DM1 alignment / overlap with Cohort 1 DM1 — concept=WEIGHTS__BOX12_DM1_ONLY.
+
+Q3A: Clean Controls vs Cohort 1 DM1 separation — concept=WEIGHTS__BOX12_ALL, Cohort 1 only.
+
+Q3B: Holistic Controls vs all DM1 separation — concept=WEIGHTS__BOX12_ALL, Cohort 1 + Cohort 2 DM1.
+
+Q4: Cohort shift within disease/control geometry — concept=WEIGHTS__BOX12_ALL, alignment metrics.
+
+Q5: Severity gradient within DM1 — concept=WEIGHTS__BOX12_DM1_ONLY, Spearman rho.
+
+Q6: Exploratory preprocessing-induced cohort separation — supplementary.
+
+
+Fit-space concepts
+----------------------------------------
+WEIGHTS__BOX12_DM1_ONLY: PCA axes derived from Cohort 1 DM1 spectra only.
+  Use for Q2 (alignment), Q5 (gradient), Q6 (exploratory).
+
+WEIGHTS__BOX12_ALL: PCA axes derived from all Cohort 1 spectra (DM1 + Controls).
+  Use for Q3A/Q3B (separation), Q4 (geometry shift).
+
+Preprocessing combos (9 total including RAW)
+----------------------------------------
+RAW, Normalization, SNV, Second Derivative, EMSC,
+Normalization+EMSC, SNV+Second Derivative,
+Normalization+SNV, Normalization+SNV+Second Derivative
