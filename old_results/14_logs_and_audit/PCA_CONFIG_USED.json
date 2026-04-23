@@ -1,0 +1,45 @@
+{
+  "timestamp": "2026-04-23T11:19:53",
+  "OUT_ROOT": "C:\\Users\\spect\\Desktop\\PCA NEW\\PCA All results",
+  "BOX12_DATA_DIR": "C:\\Users\\spect\\Desktop\\SERS_Cluster_work\\data",
+  "BOX12_META_CSV": "C:\\Users\\spect\\Desktop\\SERS_Cluster_work\\y_metadata.csv",
+  "BOX3_DATA_DIR": "C:\\Users\\spect\\Desktop\\SERS_Cluster_work\\data_test_updated",
+  "BOX3_META_CSV": "C:\\Users\\spect\\Desktop\\SERS_Cluster_work\\y_metadata_test_updated_in_order.csv",
+  "CONCEPTS": [
+    "WEIGHTS__BOX12_DM1_ONLY",
+    "WEIGHTS__BOX12_ALL"
+  ],
+  "SPECTRUM_MODES": [
+    [
+      "FULL_SPECTRUM",
+      null
+    ],
+    [
+      "TRIM_500_3100",
+      [
+        500.0,
+        3100.0
+      ]
+    ],
+    [
+      "TRIM_700_2800",
+      [
+        700.0,
+        2800.0
+      ]
+    ]
+  ],
+  "SUPPORTED_METHODS": [
+    "Normalization",
+    "SNV",
+    "Second Derivative",
+    "EMSC"
+  ],
+  "BASELINE_FLAGS": [
+    false
+  ],
+  "TOP_K_WAVENUMBERS": 25,
+  "GAP_THRESH": 25.0,
+  "FIGURE_DPI": 200,
+  "JOURNAL_DPI": 300
+}

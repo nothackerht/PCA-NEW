@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import pca_config, pca_utils, pca_preprocessing, pca_metrics, pca_plotting, pca_runner_core, pca_outputs, ultimate_pca_suite; print\\('All imports OK'\\)\")",
+      "Bash(Test-Path *)",
+      "Bash(python -c \"import pca_plotting; print\\('OK'\\)\")"
+    ]
+  }
+}
