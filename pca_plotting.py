@@ -736,6 +736,96 @@ def plot_enhanced_pca_scatter(
     return fpath
 
 
+def plot_group_enh(
+    out_dir: Path,
+    title: str,
+    scores_box12: np.ndarray,
+    scores_box3: np.ndarray,
+    meta_box12: pd.DataFrame,
+    meta_box3: pd.DataFrame,
+    dx_col: str,
+    evr: Tuple[float, float],
+    alignment_metrics: Dict[str, float],
+    separation_metrics: Dict[str, float],
+    dpi: int = FIGURE_DPI,
+    fname_stem: Optional[str] = None,
+) -> Path:
+    """
+    Clean group-colored PCA scatter with full enhanced metrics annotation box.
+    Controls=orange, Cohort 1 DM1=blue, Cohort 2 DM1=red.
+    All points are small circles. 95% ellipses + centroids included.
+    Returns saved file path.
+    """
+    pc1_var, pc2_var = evr
+    dm1_12, ctrl_12 = get_dm1_control_masks(meta_box12, dx_col, require_controls=True)
+    dm1_3,  _       = get_dm1_control_masks(meta_box3,  dx_col, require_controls=False)
+
+    s_dm1_12  = scores_box12[dm1_12]
+    s_ctrl_12 = scores_box12[ctrl_12]
+    s_dm1_3   = scores_box3[dm1_3]
+
+    fig, ax = plt.subplots(figsize=(8, 7))
+
+    ax.scatter(s_ctrl_12[:, 0], s_ctrl_12[:, 1],
+               c="darkorange", marker="o", s=18, alpha=0.85,
+               label="Controls", edgecolors="none", zorder=3)
+    ax.scatter(s_dm1_12[:, 0], s_dm1_12[:, 1],
+               c="steelblue", marker="o", s=18, alpha=0.85,
+               label="Cohort 1 DM1", edgecolors="none", zorder=3)
+    ax.scatter(s_dm1_3[:, 0], s_dm1_3[:, 1],
+               c="firebrick", marker="o", s=22, alpha=0.90,
+               label="Cohort 2 DM1", edgecolors="none", zorder=4)
+
+    _draw_confidence_ellipse(ax, s_dm1_12, 0.95,
+                             fill=False, edgecolor="steelblue", linewidth=1.5,
+                             linestyle="--", label="Cohort 1 DM1 95% ellipse", zorder=2)
+    _draw_confidence_ellipse(ax, s_ctrl_12, 0.95,
+                             fill=False, edgecolor="darkorange", linewidth=1.5,
+                             linestyle="--", label="Controls 95% ellipse", zorder=2)
+
+    if len(s_dm1_12) > 0 and len(s_dm1_3) > 0:
+        c12 = s_dm1_12.mean(axis=0)
+        c3  = s_dm1_3.mean(axis=0)
+        ax.plot([c12[0], c3[0]], [c12[1], c3[1]], "k--", lw=1.0, alpha=0.45, zorder=2)
+        ax.scatter(*c12, marker="D", s=90, c="steelblue", edgecolors="k",
+                   linewidths=0.8, zorder=5, label="Cohort 1 DM1 centroid")
+        ax.scatter(*c3, marker="D", s=90, c="firebrick", edgecolors="k",
+                   linewidths=0.8, zorder=5, label="Cohort 2 DM1 centroid")
+
+    ax.set_title(title, fontsize=9)
+    ax.set_xlabel(f"PC1 ({pc1_var*100:.1f}%)")
+    ax.set_ylabel(f"PC2 ({pc2_var*100:.1f}%)")
+    ax.legend(loc="best", frameon=True, fontsize=6.5, ncol=2)
+
+    frac_el   = alignment_metrics.get("frac_box3_inside_dm1_95ellipse",       np.nan)
+    frac_hull = alignment_metrics.get("frac_box3_inside_dm1_hull",            np.nan)
+    mahal_m   = alignment_metrics.get("mahalanobis_mean_box3_to_box12dm1",    np.nan)
+    bd        = separation_metrics.get("bhattacharyya_dm1_vs_ctrl",           np.nan)
+    sil       = separation_metrics.get("silhouette_dm1_vs_ctrl",              np.nan)
+    fco       = separation_metrics.get("frac_controls_outside_dm1_95ellipse", np.nan)
+
+    txt = (
+        f"── Alignment (Cohort 2 → Cohort 1 DM1) ──\n"
+        f"Cohort 2 in 95% ellipse : {_pct(frac_el)}\n"
+        f"Cohort 2 in hull        : {_pct(frac_hull)}\n"
+        f"Mean Mahal dist         : {_fmt(mahal_m)}\n"
+        f"── Separation (DM1 vs Controls) ──────────\n"
+        f"Bhattacharyya dist      : {_fmt(bd)}\n"
+        f"Silhouette              : {_fmt(sil, '.3f')}\n"
+        f"Controls outside ellipse: {_pct(fco)}"
+    )
+    ax.text(0.02, 0.98, txt, transform=ax.transAxes, fontsize=7.0,
+            verticalalignment="top", family="monospace",
+            bbox=dict(boxstyle="round,pad=0.35", facecolor="white", alpha=0.88))
+
+    fig.tight_layout()
+    _stem = sanitize_filename(fname_stem) if fname_stem else sanitize_filename(title)
+    fpath = out_dir / (_stem + "_group_enh.png")
+    fig.savefig(fpath, dpi=dpi)
+    plt.close(fig)
+    return fpath
+
+
 # =============================================================================
 # Loadings and spectral overlay
 # =============================================================================
@@ -771,6 +861,11 @@ def plot_loadings(
     return fpath
 
 
+_OVL_CTRL  = "darkorange"
+_OVL_DM1   = "forestgreen"
+_OVL_BOX3  = "mediumpurple"
+
+
 def plot_overlay(
     out_dir: Path,
     title: str,
@@ -779,27 +874,71 @@ def plot_overlay(
     X_test: np.ndarray,
     wn_pc1: np.ndarray,
     wn_pc2: np.ndarray,
+    meta_train: Optional[pd.DataFrame] = None,
+    meta_test:  Optional[pd.DataFrame] = None,
+    dx_col: Optional[str] = None,
     gap_thresh: float = GAP_THRESH,
     dpi: int = FIGURE_DPI,
     fname_stem: Optional[str] = None,
 ) -> Path:
     """
     Spectra overlay with highlighted important wavenumbers.
-    Blue lines = top PC1, red lines = top PC2.
-    Returns saved file path.
+    When meta_train / meta_test / dx_col are provided:
+      Controls (train)   → darkorange
+      Cohort 1 DM1       → forestgreen
+      Cohort 2 DM1       → mediumpurple
+    PC1 top wavenumbers → blue vertical lines (unchanged)
+    PC2 top wavenumbers → red vertical lines (unchanged)
     """
     segs = break_by_gap(wavenumbers, gap_thresh)
     fig, ax = plt.subplots(figsize=(14, 4.5))
-    for j in range(X_train.shape[1]):
-        for seg in segs:
-            ax.plot(wavenumbers[seg], X_train[seg, j], alpha=0.07, linewidth=0.7, color="steelblue")
-    for j in range(X_test.shape[1]):
-        for seg in segs:
-            ax.plot(wavenumbers[seg], X_test[seg, j], alpha=0.07, linewidth=0.7, color="crimson")
+
+    legend_handles: List = []
+
+    if meta_train is not None and meta_test is not None and dx_col is not None:
+        dm1_12, ctrl_12 = get_dm1_control_masks(meta_train, dx_col, require_controls=True)
+        dm1_3,  _       = get_dm1_control_masks(meta_test,  dx_col, require_controls=False)
+
+        def _plot_group(X, col_mask, color, alpha=0.07):
+            for j in np.where(col_mask)[0]:
+                for seg in segs:
+                    ax.plot(wavenumbers[seg], X[seg, j],
+                            alpha=alpha, linewidth=0.7, color=color)
+
+        _plot_group(X_train, ctrl_12, _OVL_CTRL)
+        _plot_group(X_train, dm1_12,  _OVL_DM1)
+        _plot_group(X_test,  dm1_3,   _OVL_BOX3)
+
+        import matplotlib.lines as mlines
+        legend_handles = [
+            mlines.Line2D([], [], color=_OVL_CTRL, lw=1.5, label="Controls"),
+            mlines.Line2D([], [], color=_OVL_DM1,  lw=1.5, label="Cohort 1 DM1"),
+            mlines.Line2D([], [], color=_OVL_BOX3, lw=1.5, label="Cohort 2 DM1"),
+            mlines.Line2D([], [], color="blue",   lw=1.5, linestyle="-",
+                          alpha=0.7, label="PC1 top wavenumbers"),
+            mlines.Line2D([], [], color="red",    lw=1.5, linestyle="-",
+                          alpha=0.7, label="PC2 top wavenumbers"),
+        ]
+    else:
+        # legacy fallback
+        for j in range(X_train.shape[1]):
+            for seg in segs:
+                ax.plot(wavenumbers[seg], X_train[seg, j],
+                        alpha=0.07, linewidth=0.7, color="steelblue")
+        for j in range(X_test.shape[1]):
+            for seg in segs:
+                ax.plot(wavenumbers[seg], X_test[seg, j],
+                        alpha=0.07, linewidth=0.7, color="crimson")
+
     for w in wn_pc1:
-        ax.axvline(float(w), color="blue",  alpha=0.18, linewidth=1.0)
+        ax.axvline(float(w), color="blue", alpha=0.18, linewidth=1.0)
     for w in wn_pc2:
-        ax.axvline(float(w), color="red",   alpha=0.18, linewidth=1.0)
+        ax.axvline(float(w), color="red",  alpha=0.18, linewidth=1.0)
+
+    if legend_handles:
+        ax.legend(handles=legend_handles, fontsize=7.5, loc="upper right",
+                  frameon=True, framealpha=0.9)
+
     ax.set_title(title, fontsize=9)
     ax.set_xlabel("Wavenumber (cm⁻\xb9)")
     ax.set_ylabel("Intensity")
@@ -822,10 +961,14 @@ def save_loading_and_overlay(
     gap_thresh: float = GAP_THRESH,
     dpi: int = FIGURE_DPI,
     fname_stem: Optional[str] = None,
+    meta_train: Optional[pd.DataFrame] = None,
+    meta_test:  Optional[pd.DataFrame] = None,
+    dx_col: Optional[str] = None,
 ) -> Tuple[np.ndarray, np.ndarray, Path, Path, Path]:
     """
     Generate loadings plot + spectra overlay + top_wavenumbers CSV.
     Returns (wn_pc1, wn_pc2, loadings_path, overlay_path, top_wn_csv_path).
+    Pass meta_train, meta_test, dx_col to enable group-colored overlay.
     """
     pc1_vec = pca_model.components_[0]
     pc2_vec = pca_model.components_[1]
@@ -842,8 +985,9 @@ def save_loading_and_overlay(
     op = plot_overlay(
         out_dir,
         f"{run_name}__Overlay_top-{top_k}_PC1_blue_PC2_red",
-        wavenumbers, X_overlay_train, X_overlay_test, wn1, wn2, gap_thresh, dpi=dpi,
-        fname_stem=fname_stem,
+        wavenumbers, X_overlay_train, X_overlay_test, wn1, wn2,
+        meta_train=meta_train, meta_test=meta_test, dx_col=dx_col,
+        gap_thresh=gap_thresh, dpi=dpi, fname_stem=fname_stem,
     )
     return wn1, wn2, lp, op, csv_path
 
@@ -929,17 +1073,32 @@ def make_journal_figure(
     ax1.set_ylabel(f"PC2 ({pc2_var*100:.1f}%)")
     ax1.legend(fontsize=7, loc="lower right", frameon=True, ncol=2)
 
-    # Right — spectra overlay
-    for j in range(X_ov_tr.shape[1]):
+    # Right — spectra overlay (group-colored)
+    dm1_tr_ov, ctrl_tr_ov = get_dm1_control_masks(meta_tr, dx_col, require_controls=True)
+    dm1_te_ov, _          = get_dm1_control_masks(meta_te, dx_col, require_controls=False)
+    for j in np.where(ctrl_tr_ov)[0]:
         for seg in segs:
-            ax2.plot(wn_use[seg], X_ov_tr[seg, j], alpha=0.07, lw=0.7, color="steelblue")
-    for j in range(X_ov_te.shape[1]):
+            ax2.plot(wn_use[seg], X_ov_tr[seg, j], alpha=0.07, lw=0.7, color=_OVL_CTRL)
+    for j in np.where(dm1_tr_ov)[0]:
         for seg in segs:
-            ax2.plot(wn_use[seg], X_ov_te[seg, j], alpha=0.07, lw=0.7, color="crimson")
+            ax2.plot(wn_use[seg], X_ov_tr[seg, j], alpha=0.07, lw=0.7, color=_OVL_DM1)
+    for j in np.where(dm1_te_ov)[0]:
+        for seg in segs:
+            ax2.plot(wn_use[seg], X_ov_te[seg, j], alpha=0.07, lw=0.7, color=_OVL_BOX3)
     for w in wn1:
         ax2.axvline(float(w), color="blue", alpha=0.2, lw=1.0)
     for w in wn2:
         ax2.axvline(float(w), color="red",  alpha=0.2, lw=1.0)
+    import matplotlib.lines as mlines
+    _ovl_handles = [
+        mlines.Line2D([], [], color=_OVL_CTRL, lw=1.5, label="Controls"),
+        mlines.Line2D([], [], color=_OVL_DM1,  lw=1.5, label="Cohort 1 DM1"),
+        mlines.Line2D([], [], color=_OVL_BOX3, lw=1.5, label="Cohort 2 DM1"),
+        mlines.Line2D([], [], color="blue", lw=1.5, alpha=0.7, label="PC1 top wn"),
+        mlines.Line2D([], [], color="red",  lw=1.5, alpha=0.7, label="PC2 top wn"),
+    ]
+    ax2.legend(handles=_ovl_handles, fontsize=7, loc="upper right",
+               frameon=True, framealpha=0.9)
     ax2.set_xlabel("Wavenumber (cm⁻\xb9)")
     ax2.set_ylabel("Intensity")
     ax2.set_title(f"Overlay — top-{TOP_K_WAVENUMBERS} PC1 (blue) / PC2 (red)", fontsize=9)

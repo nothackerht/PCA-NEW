@@ -42,6 +42,7 @@ from pca_plotting import (
     plot_grad_panels,
     plot_grad_proj,
     plot_gradient_direction,
+    plot_group_enh,
     plot_group_scatter,
     plot_si_scatter,
     save_loading_and_overlay,
@@ -204,12 +205,12 @@ def _save_artifacts(
     run_name: str,
     mode_name: str,
     q_id: str,
-) -> Tuple[Path, Path, Path, Path, Path, Path, Path, Path, Path, Path, Path]:
+) -> Tuple[Path, Path, Path, Path, Path, Path, Path, Path, Path, Path, Path, Path]:
     """
-    Save ALL 11 artifact files for one (question, run, mode) into out_dir.
+    Save ALL 12 artifact files for one (question, run, mode) into out_dir.
     Returns:
       group, si, enh, load, overlay, csv,
-      grad_dir, grad_axis, grad_proj, grad_bins, grad_panels
+      grad_dir, grad_axis, grad_proj, grad_bins, grad_panels, group_enh
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     gp = plot_group_scatter(
@@ -221,9 +222,13 @@ def _save_artifacts(
     ep = plot_enhanced_pca_scatter(
         out_dir, base_title, sc12, sc3, meta_tr, meta_te, si_col, dx_col, evr,
         align, sep_hol, fname_stem=pmode)
+    gep = plot_group_enh(
+        out_dir, base_title, sc12, sc3, meta_tr, meta_te, dx_col, evr,
+        align, sep_hol, fname_stem=pmode)
     _, _, lp, op, cp = save_loading_and_overlay(
         out_dir, base_title, wn_use, pca, X_tr, X_te,
-        top_k=TOP_K_WAVENUMBERS, gap_thresh=GAP_THRESH, fname_stem=pmode)
+        top_k=TOP_K_WAVENUMBERS, gap_thresh=GAP_THRESH, fname_stem=pmode,
+        meta_train=meta_tr, meta_test=meta_te, dx_col=dx_col)
     grad_keys = ("rho_pc1", "rho_pc2", "grad_score")
     grad_m = {k: m[k] for k in grad_keys if k in m}
     gdp  = plot_gradient_direction(
@@ -252,7 +257,7 @@ def _save_artifacts(
         ),
         fname_stem=pmode,
     )
-    return gp, sp, ep, lp, op, cp, gdp, axp, prp, bnp, pnp
+    return gp, sp, ep, lp, op, cp, gdp, axp, prp, bnp, pnp, gep
 
 
 # =============================================================================
@@ -310,7 +315,7 @@ def run_question1_raw_geometry(
             sep_hol = {k[4:]: v for k, v in m.items() if k.startswith("hol_")}
             sep_cln = {k[4:]: v for k, v in m.items() if k.startswith("cln_")}
 
-            gp, sp, ep, lp, op, cp, gdp, axp, prp, bnp, pnp = _save_artifacts(
+            gp, sp, ep, lp, op, cp, gdp, axp, prp, bnp, pnp, gep = _save_artifacts(
                 out_dir, base_title, pmode,
                 sc12, sc3, meta_tr, meta_te, si_col, dx_col, evr,
                 align, sep_hol, sep_cln, m,
@@ -348,6 +353,7 @@ def run_question1_raw_geometry(
                 grad_proj_path=str(prp),
                 grad_bins_path=str(bnp),
                 grad_panels_path=str(pnp),
+                group_enh_path=str(gep),
             ))
             print(f"[Q1] {mode_name} | {pmode} done")
 
@@ -438,7 +444,7 @@ def _run_one_sweep_config(
         # --- Save ALL artifacts per question ---
         if concept == "WEIGHTS__BOX12_DM1_ONLY":
             q2_out = qdirs["q2"] / sw / sc / pmode / run_name
-            gp, sp, ep, lp, op, cp, gdp, axp, prp, bnp, pnp = _save_artifacts(
+            gp, sp, ep, lp, op, cp, gdp, axp, prp, bnp, pnp, gep = _save_artifacts(
                 q2_out, base_title, pmode,
                 sc12, sc3, meta_tr, meta_te, si_col, dx_col, evr,
                 align, sep_hol, sep_cln, m, wn_use, pca, X_tr, X_te,
@@ -460,7 +466,7 @@ def _run_one_sweep_config(
 
         elif concept == "WEIGHTS__BOX12_ALL":
             q3a_out = qdirs["q3a"] / sw / sc / pmode / run_name
-            gp, sp, ep, lp, op, cp, gdp, axp, prp, bnp, pnp = _save_artifacts(
+            gp, sp, ep, lp, op, cp, gdp, axp, prp, bnp, pnp, gep = _save_artifacts(
                 q3a_out, base_title, pmode,
                 sc12, sc3, meta_tr, meta_te, si_col, dx_col, evr,
                 align, sep_hol, sep_cln, m, wn_use, pca, X_tr, X_te,
@@ -513,6 +519,7 @@ def _run_one_sweep_config(
             grad_proj_path       = str(prp),
             grad_bins_path       = str(bnp),
             grad_panels_path     = str(pnp),
+            group_enh_path       = str(gep),
         )
         rows.append(row)
 

@@ -42,6 +42,7 @@ from pca_plotting import (
     plot_grad_panels,
     plot_grad_proj,
     plot_gradient_direction,
+    plot_group_enh,
     plot_group_scatter,
     plot_si_scatter,
     save_loading_and_overlay,
@@ -370,7 +371,7 @@ def generate_winner_outputs(
         )
         assets["enhanced_scatter"] = str(enh_p)
 
-        # 09 — loadings + top_wn CSV
+        # 09 — loadings + top_wn CSV (group-colored overlay)
         w_load = dir_load / sanitize_filename(q_key)
         w_load.mkdir(parents=True, exist_ok=True)
         wn1, wn2, lp, op, csv_p = save_loading_and_overlay(
@@ -378,12 +379,13 @@ def generate_winner_outputs(
             X_ov_tr, X_ov_te,
             top_k=TOP_K_WAVENUMBERS, gap_thresh=GAP_THRESH, dpi=JOURNAL_DPI,
             fname_stem=stem,
+            meta_train=meta_sc_tr, meta_test=meta_sc_te, dx_col=dx_col,
         )
         assets["loadings"]       = str(lp)
         assets["overlay"]        = str(op)
         assets["top_wn_csv"]     = str(csv_p)
 
-        # 10 — group + SI scatter
+        # 10 — group + SI + group_enh scatters
         w_scat = dir_scat / sanitize_filename(q_key)
         w_scat.mkdir(parents=True, exist_ok=True)
         gp = plot_group_scatter(w_scat, stem,
@@ -392,8 +394,12 @@ def generate_winner_outputs(
         sp = plot_si_scatter(w_scat, stem,
                              sc12, sc3, meta_sc_tr, meta_sc_te, si_col, dx_col, evr,
                              fname_stem=stem)
+        gep = plot_group_enh(w_scat, stem,
+                             sc12, sc3, meta_sc_tr, meta_sc_te, dx_col, evr,
+                             align, sep_hol, dpi=JOURNAL_DPI, fname_stem=stem)
         assets["group_scatter"] = str(gp)
         assets["si_scatter"]    = str(sp)
+        assets["group_enh"]     = str(gep)
 
         # gradient figures (DM1-only concepts only)
         if winner.get("concept", "") == "WEIGHTS__BOX12_DM1_ONLY":
@@ -640,6 +646,7 @@ _BUNDLE_PATH_COLS = [
     "scatter_plot_path",
     "si_scatter_plot_path",
     "enhanced_plot_path",
+    "group_enh_path",
     "loadings_plot_path",
     "overlay_plot_path",
     "top_wavenumbers_csv_path",
